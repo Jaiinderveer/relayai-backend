@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from backend.models.schemas import ChatRequest
-from backend.services.ai_service import agentic_save
+from models.schemas import ChatRequest
+from services.ai_service import agentic_save
 
 router = APIRouter(prefix="/api/chat", tags=["Agentic Chat"])
 

@@ -1,12 +1,12 @@
 from datetime import timezone
 import datetime
 import re
-from backend.firebase.db_helper import DBHelper
-from backend.core.config import (
+from firebase.db_helper import DBHelper
+from core.config import (
     elevenlabs_client, twilio_client, 
     ELEVENLABS_AGENT_ID, ELEVENLABS_PHONE_NUMBER_ID
 )
-from backend.services.task_service import normalize_text, HAS_RAPIDFUZZ
+from services.task_service import normalize_text, HAS_RAPIDFUZZ
 
 if HAS_RAPIDFUZZ:
     from rapidfuzz import fuzz

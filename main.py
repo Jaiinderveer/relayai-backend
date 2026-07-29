@@ -2,8 +2,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
-from backend.routes import chat, calls, analytics, contacts
-from backend.services.automation import start_automation_engine
+from routes import chat, calls, analytics, contacts
+from services.automation import start_automation_engine
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

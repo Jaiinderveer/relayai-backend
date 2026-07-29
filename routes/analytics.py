@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
-from backend.firebase.db_helper import get_dashboard_metrics
-from backend.models.schemas import ChatRequest
-from backend.core.config import openai_client
+from firebase.db_helper import get_dashboard_metrics
+from models.schemas import ChatRequest
+from core.config import openai_client
 import json
 
 router = APIRouter(prefix="/api/analytics", tags=["Analytics"])

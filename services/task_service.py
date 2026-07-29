@@ -1,7 +1,7 @@
 import re
 import string
 import datetime
-from backend.firebase.db_helper import DBHelper, get_dashboard_metrics, get_tasks_query, get_calls_query
+from firebase.db_helper import DBHelper, get_dashboard_metrics, get_tasks_query, get_calls_query
 
 try:
     from rapidfuzz import fuzz

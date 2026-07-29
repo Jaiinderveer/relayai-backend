@@ -1,6 +1,6 @@
 import threading
 import time
-from backend.services.caller_service import fetch_conversation_status, execute_pending_calls
+from services.caller_service import fetch_conversation_status, execute_pending_calls
 
 AUTOMATION_THREAD = None
 

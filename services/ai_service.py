@@ -1,7 +1,7 @@
 import json
 import re
-from backend.core.config import openai_client
-from backend.services.task_service import (
+from core.config import openai_client
+from services.task_service import (
     format_save_task, format_update_task, format_delete_task, 
     format_list_tasks
 )

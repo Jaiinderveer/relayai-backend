@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from typing import Optional
-from backend.firebase.db_helper import DBHelper
-from backend.core.config import elevenlabs_client
+from firebase.db_helper import DBHelper
+from core.config import elevenlabs_client
 
 router = APIRouter(prefix="/api/calls", tags=["Calls"])
 

@@ -3,7 +3,7 @@ from datetime import timezone
 import re
 from typing import Dict, Any, List, Optional
 from google.cloud.firestore_v1 import FieldFilter
-from backend.firebase.client import db
+from firebase.client import db
 
 class UpdateResult:
     """Wrapper to mimic PyMongo UpdateResult signature."""

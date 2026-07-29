@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException
-from backend.firebase.db_helper import DBHelper
-from backend.models.schemas import ContactCreate, ContactUpdate
+from firebase.db_helper import DBHelper
+from models.schemas import ContactCreate, ContactUpdate
 
 router = APIRouter(prefix="/api/contacts", tags=["Contacts"])
 
