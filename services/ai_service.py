@@ -6,7 +6,7 @@ from services.task_service import (
     format_list_tasks
 )
 # Note: In Phase 4, we will add the remaining formatters (fetch_call_history, save_contact, etc.) to task_service.py
-from backend.firebase.db_helper import get_dashboard_metrics
+from firebase.db_helper import get_dashboard_metrics
 
 # Rebranded Greeting Regex
 FAST_GREETING_REGEX = re.compile(
