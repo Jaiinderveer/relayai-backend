@@ -1,7 +1,6 @@
 import re
 import string
-import datetime
-from firebase.db_helper import DBHelper, get_dashboard_metrics, get_tasks_query, get_calls_query
+from firebase.db_helper import DBHelper
 
 try:
     from rapidfuzz import fuzz
@@ -100,7 +99,7 @@ def format_update_task(title: str, description=None, action=None, contact_name=N
     updates = {}
     if description: updates["description"] = description
     if action: updates["action"] = action.lower()
-    if contact_name: updates["contact_name"] = " ".join(contact_name.strip().split())
+    if contact_name: updates["contact_name"] = " ".join(contact_name.strip().split()).capitalize()
 
     res = db.update({'title': real_title}, updates)
     if res.matched_count == 0: return "Task not found."

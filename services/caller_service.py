@@ -1,6 +1,4 @@
-from datetime import timezone
 import datetime
-import re
 from firebase.db_helper import DBHelper
 from core.config import (
     elevenlabs_client, twilio_client, 
