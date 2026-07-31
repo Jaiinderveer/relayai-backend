@@ -140,64 +140,22 @@ tools = [
         "parameters": {"type": "object", "properties": {}}
     }
 ]
-
-def classify_intent(text: str) -> str:
-    if FAST_GREETING_REGEX.match(text.strip()): return "CASUAL"
-
-    prompt = (
-        "Classify the user message into exactly ONE category:\n"
-        "CASUAL: Greetings, small talk, pleasantries.\n"
-        "CALLS: Questions specifically about phone calls, call history, failed calls, who didn't answer, call status.\n"
-        "TASKS: Questions about generic tasks, pending tasks, deleting/updating tasks.\n"
-        "CONTACTS: Questions about managing, creating, or searching contacts.\n"
-        "DASHBOARD: Questions asking for analytics, summaries, aggregated counts, 'how many', success rates.\n"
-        "UNRELATED: Unrelated programming, math, general knowledge.\n\n"
-        f"Message: '{text}'\n"
-        "Category (CASUAL, CALLS, TASKS, CONTACTS, DASHBOARD, or UNRELATED):"
-    )
-
-    try:
-        response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.0,
-            max_tokens=5
-        )
-        cat = response.choices[0].message.content.strip().upper()
-        if "CASUAL" in cat: return "CASUAL"
-        elif "CALLS" in cat: return "CALLS"
-        elif "TASKS" in cat: return "TASKS"
-        elif "CONTACTS" in cat: return "CONTACTS"
-        elif "DASHBOARD" in cat: return "DASHBOARD"
-        elif "UNRELATED" in cat: return "UNRELATED"
-        return "CALLS" if "CALL" in text.upper() else "TASKS"
-    except Exception:
-        return "CALLS" if "CALL" in text.upper() else "TASKS"
-
-
 def agentic_save(input_list: list) -> str:
     user_query = next((item['content'] for item in reversed(input_list) if item['role'] == 'user'), "")
-    intent = classify_intent(user_query) if user_query else "TASKS"
-
-    if intent == "UNRELATED":
-        return "I'm RelayAI, your AI assistant for this platform. I can help you manage tasks, contacts, phone calls, schedules, and analytics, but I can't assist with unrelated programming or general knowledge requests."
-
-    system_msg_content = (
-        "You are RelayAI, a specialized AI assistant for a Call Management Platform. "
-        "FORMATTING RULE: Never use LaTeX formatting like \\[ ... \\] or \\( ... \\) for math. "
-        "Always present numbers, percentages, and simple calculations in plain text and standard Markdown. "
-    )
     
-    if intent == "CALLS":
-        system_msg_content += "CRITICAL INSTRUCTION: The user is asking about CALLS. You MUST call 'fetch_call_history' immediately. NEVER ask the user for clarification or timeframes."
-    elif intent == "TASKS":
-        system_msg_content += "The user is asking about TASKS. Use the generic task management tools."
-    elif intent == "DASHBOARD":
-        system_msg_content += "The user is asking about DASHBOARD analytics or aggregated counts. Use the 'analyze_dashboard_data' tool."
-    elif intent == "CONTACTS":
-        system_msg_content += "The user is asking about CONTACTS. Use contact management tools."
-    elif intent == "CASUAL":
-        system_msg_content += "The user is making casual conversation. Introduce yourself warmly and state your capabilities."
+    system_msg_content = """
+        You are RelayAI, an AI assistant for a Workforce and Call Management platform.
+
+        Use the provided functions whenever the user's request requires data retrieval or modification.
+
+        Never invent task, contact, or call information.
+
+        If a suitable function exists, call it.
+
+        Only answer directly when no function is needed.
+
+        Never use LaTeX.
+        """
 
     system_msg = {"role": "system", "content": system_msg_content}
 
