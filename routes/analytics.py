@@ -1,8 +1,9 @@
 from fastapi import APIRouter, HTTPException
 from firebase.db_helper import get_dashboard_metrics
 from models.schemas import ChatRequest
-from core.config import openai_client
+from core.config import gemini_client
 import json
+from google.genai import types
 
 router = APIRouter(prefix="/api/analytics", tags=["Analytics"])
 
@@ -34,19 +35,28 @@ def ask_analyst(request: ChatRequest):
             f"CURRENT REAL-TIME METRICS CONTEXT:\n{metrics_json}"
         )
 
-        # 3. Assemble message payload
-        messages = [{"role": "system", "content": system_prompt}]
-        for msg in request.input_list:
-            messages.append({"role": msg.role, "content": msg.content})
+        contents = []
 
-        # 4. Single OpenAI Call (Minimizes API usage, prevents tool hallucination)
-        response = openai_client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=messages,
-            temperature=0.0
+        for msg in request.input_list:
+            role = "model" if msg.role == "assistant" else "user"
+
+            contents.append(
+                types.Content(
+                    role=role,
+                    parts=[types.Part(text=msg.content)]
+                )
+            )
+
+        response = gemini_client.models.generate_content(
+            model="gemini-3.5-flash-lite",
+            contents=contents,
+            config=types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=0.0,
+            )
         )
 
-        return {"response": response.choices[0].message.content}
+        return {"response": response.text}
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException
 from models.schemas import ChatRequest
 from services.ai_service import agentic_save
-
+import traceback
 router = APIRouter(prefix="/api/chat", tags=["Agentic Chat"])
 
 @router.post("/")
@@ -12,5 +12,7 @@ async def chat_with_agent(request: ChatRequest):
         
         response_text = agentic_save(input_list)
         return {"response": response_text}
+
     except Exception as e:
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))

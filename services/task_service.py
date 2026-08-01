@@ -1,6 +1,6 @@
 import re
 import string
-from firebase.db_helper import DBHelper
+from firebase.db_helper import DBHelper, get_tasks_query
 
 try:
     from rapidfuzz import fuzz
@@ -113,3 +113,69 @@ def format_delete_task(title: str) -> str:
     res = db.delete({'title': real_title})
     if res.deleted_count == 0: return "Task not found."
     return f"Task **'{real_title}'** deleted successfully."
+def format_fetch_filtered_tasks(status: str = None, date_preset: str = None) -> str:
+    tasks = get_tasks_query(status=status, date_preset=date_preset)
+    if not tasks: return "No tasks found matching criteria."
+    text = ""
+    for i, task in enumerate(tasks, start=1):
+        text += (
+            f"Task {i}\n\nTitle: {task.get('title')}\n\nDescription: {task.get('description')}\n\n"
+            f"Action: {task.get('action')}\n\nContact: {task.get('contact_name')}\n\nStatus: {task.get('status')}\n\n"
+            f"Created At: {task.get('created_at')}\n\n\n{'='*45}\n\n"
+        )
+    return text
+
+# Call Domain
+def format_fetch_call_history(call_status_intent: str = None, date_preset: str = None) -> str:
+    db = DBHelper('tasks')
+    calls = db.get_calls(intent_status=call_status_intent, date_preset=date_preset)
+    if not calls: return "No call history found."
+    text = ""
+    for i, call in enumerate(calls, start=1):
+        text += (
+            f"Call {i}\n\nTitle: {call.get('title', 'N/A')}\n\nContact: {call.get('contact_name', 'N/A')}\n\n"
+            f"Status: {call.get('status', 'N/A')}\n\nTwilio Status: {call.get('twilio_status', 'N/A')}\n\n"
+            f"Created At: {call.get('created_at')}\n\n\n{'='*45}\n\n"
+        )
+    return text
+
+# Contact Domain
+def format_save_contact(name: str, phone: str) -> str:
+    if(len(phone) < 13 or not phone[1:].isnumeric()):
+        return "Invalid Number. Please Enter in the Format (+91<your_number>)"
+    db = DBHelper('contacts')
+    db.save_contact(name.capitalize(), phone)
+    return f"Contact saved successfully.\n\n**Name:** {name.capitalize()}\n\n**Phone:** {phone}\n\n"
+
+def format_update_contact(name: str, phone: str) -> str:
+    db = DBHelper('contacts')
+    real_name, error_msg = resolve_entity(db, "name", name)
+    if error_msg: return error_msg
+
+    res = db.update_contact(real_name, phone)
+    if res.matched_count == 0: return "Contact not found."
+    return f"Contact **'{real_name}'** updated successfully with new phone **{phone}**."
+
+def format_delete_contact(name: str) -> str:
+    db = DBHelper('contacts')
+    real_name, error_msg = resolve_entity(db, "name", name)
+    if error_msg: return error_msg
+
+    res = db.delete_contact(real_name)
+    if res.deleted_count == 0: return "Contact not found."
+    return f"Contact **'{real_name}'** deleted successfully."
+
+def format_search_contacts(name: str = None) -> str:
+    db = DBHelper('contacts')
+    if name and name.strip():
+        real_name, error_msg = resolve_entity(db, "name", name)
+        if error_msg: return error_msg
+        contacts = db.get_contacts({'name': real_name})
+    else:
+        contacts = db.get_contacts()
+
+    if not contacts: return "No contacts found."
+    text = ""
+    for i, contact in enumerate(contacts, start=1):
+        text += f"Contact {i}\n\nName: {contact.get('name')}\n\nPhone: {contact.get('phone')}\n\n\n{'='*45}\n\n"
+    return text

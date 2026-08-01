@@ -1,10 +1,13 @@
 import json
 import re
-from core.config import openai_client
+from core.config import gemini_client
 from services.task_service import (
     format_save_task, format_update_task, format_delete_task, 
-    format_list_tasks
+    format_list_tasks, format_fetch_filtered_tasks, format_fetch_call_history,
+    format_save_contact, format_update_contact, format_delete_contact,
+    format_search_contacts
 )
+from google.genai import types 
 # Note: In Phase 4, we will add the remaining formatters (fetch_call_history, save_contact, etc.) to task_service.py
 from firebase.db_helper import get_dashboard_metrics
 
@@ -164,29 +167,60 @@ def agentic_save(input_list: list) -> str:
     else:
         input_list[0] = system_msg
 
-    response = openai_client.responses.create(
-        model="gpt-4o-mini",
-        tools=tools,
-        input=input_list,
-    )  
+# Convert OpenAI tool schema to Gemini tool schema
+    function_declarations = [
+        types.FunctionDeclaration(
+            name=tool["name"],
+            description=tool["description"],
+            parameters_json_schema=tool["parameters"],
+        )
+        for tool in tools
+    ]
 
+    gemini_tools = [
+        types.Tool(function_declarations=function_declarations)
+    ]
+
+    # Convert OpenAI messages to Gemini contents
+    contents = []
+
+    for msg in input_list:
+        if msg["role"] == "system":
+            continue
+
+        role = "model" if msg["role"] == "assistant" else "user"
+
+        contents.append(
+            types.Content(
+                role=role,
+                parts=[types.Part(text=msg["content"])]
+            )
+        )
+
+    response = gemini_client.models.generate_content(
+        model="gemini-3.5-flash-lite",
+        contents=contents,
+        config=types.GenerateContentConfig(
+            system_instruction=system_msg_content,
+            tools=gemini_tools,
+            temperature=0
+        )
+    )
+    
     function_call = None
     assistant_text = ""
 
-    for item in response.output:
-        if item.type == "function_call":
-            function_call = item
-            break
-        elif item.type == "message":
-            for content in item.content:
-                if content.type == "output_text":
-                    assistant_text += content.text
+    if response.function_calls:
+        function_call = response.function_calls[0]
+
+    if response.text:
+        assistant_text = response.text
                     
     result = "Sorry, I couldn't understand your request."
     
     if function_call:
         function_name = function_call.name
-        arguments = json.loads(function_call.arguments)
+        arguments = function_call.args
 
         if function_name == "save_task":
             arguments['user_original_text'] = user_query
@@ -197,20 +231,23 @@ def agentic_save(input_list: list) -> str:
             result = format_delete_task(arguments["title"])
         elif function_name == "list_tasks":
             result = format_list_tasks()
+        elif function_name == "save_contact":
+            result = format_save_contact(**arguments)
+
+        elif function_name == "update_contact":
+            result = format_update_contact(**arguments)
+
+        elif function_name == "delete_contact":
+            result = format_delete_contact(**arguments)
+
+        elif function_name == "search_contacts":
+            result = format_search_contacts(**arguments)
+        elif function_name == "fetch_call_history":
+            result = format_fetch_call_history(**arguments)
+        elif function_name == "fetch_filtered_tasks":
+            result = format_fetch_filtered_tasks(**arguments)
         elif function_name == "analyze_dashboard_data":
-            summary_json = json.dumps(get_dashboard_metrics())
-            tool_call_id = getattr(function_call, 'id', 'call_dash_001')
-            
-            assistant_msg = {
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [{"id": tool_call_id, "type": "function", "function": {"name": function_name, "arguments": function_call.arguments}}]
-            }
-            tool_msg = {"role": "tool", "tool_call_id": tool_call_id, "name": function_name, "content": summary_json}
-            
-            msg_list = input_list + [assistant_msg, tool_msg]
-            follow_up_response = openai_client.chat.completions.create(model="gpt-4o-mini", messages=msg_list)
-            result = follow_up_response.choices[0].message.content
+            result = json.dumps(get_dashboard_metrics(), indent=2)
         # Additional function routers will be wired here...
     elif assistant_text:
         result = assistant_text
