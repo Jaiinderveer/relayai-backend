@@ -10,7 +10,7 @@ async def chat_with_agent(request: ChatRequest):
         # Convert Pydantic models to list of dicts for OpenAI
         input_list = [{"role": msg.role, "content": msg.content} for msg in request.input_list]
         
-        response_text = agentic_save(input_list)
+        response_text = agentic_save(input_list,mode = request.mode)
         return {"response": response_text}
 
     except Exception as e:

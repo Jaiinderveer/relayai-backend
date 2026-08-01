@@ -1,24 +1,16 @@
 import json
-import re
 from core.config import gemini_client
 from services.task_service import (
     format_save_task, format_update_task, format_delete_task, 
     format_list_tasks, format_fetch_filtered_tasks, format_fetch_call_history,
     format_save_contact, format_update_contact, format_delete_contact,
-    format_search_contacts
+    format_search_contacts,format_analyze_calls,format_analyze_contacts,format_analyze_tasks
 )
 from google.genai import types 
 # Note: In Phase 4, we will add the remaining formatters (fetch_call_history, save_contact, etc.) to task_service.py
-from firebase.db_helper import get_dashboard_metrics
-
-# Rebranded Greeting Regex
-FAST_GREETING_REGEX = re.compile(
-    r"^(hi|hello|hey|good morning|good evening|good afternoon|thanks|thank you|bye|how are you\??|who are you\??|what can you do\??|help|nice to meet you)[\s!.]*$",
-    re.IGNORECASE
-)
 
 # Copied exactly from ai_agent.py
-tools = [
+DEFAULT_TOOLS = [
     {
         "type": "function",
         "name": "save_task",
@@ -35,7 +27,7 @@ tools = [
         },
     },
     {
-        "type": "function",
+        "type": "function", 
         "name": "list_tasks",
         "description": "Retrieve and display ALL tasks stored in database without filtering.",
         "parameters": {"type": "object", "properties": {}}
@@ -80,19 +72,37 @@ tools = [
     {
         "type": "function",
         "name": "fetch_call_history",
-        "description": "Fetch CALLS specifically (e.g. 'which call failed', 'show failed calls', 'call history'). ALWAYS execute immediately without asking for clarification.",
+        "description": """Retrieve individual call records and call logs.
+                            Use ONLY when the user wants to VIEW, LIST, DISPLAY or SHOW call records.
+                            Examples:
+                            - Show failed calls
+                            - Show today's calls
+                            - Show Rahul's calls
+                            - List call history
+                            - Display completed calls
+                            DO NOT use this tool for:
+                            - How many...
+                            - Count...
+                            - Statistics...
+                            - Success rate...
+                            - Failure rate...
+                            - Why did the last call fail?
+                            - Analyze...
+                            - Summarize...""",
         "parameters": {
             "type": "object",
             "properties": {
                 "call_status_intent": {
-                    "type": "string", 
-                    "enum": ["FAILED", "COMPLETED", "PENDING", "ALL"],
-                    "description": "High level intent: FAILED for failed calls, COMPLETED for completed calls, PENDING for pending/calling calls, ALL for all calls."
+                    "type": "string",
+                    "enum": ["FAILED","COMPLETED","PENDING","ALL"]
                 },
                 "date_preset": {
-                    "type": "string", 
-                    "enum": ["today", "yesterday", "this_week"],
-                    "description": "ONLY pass if user explicitly typed 'today', 'yesterday', or 'this_week' in their input."
+                    "type": "string",
+                    "enum": ["today","yesterday","this_week"]
+                },
+                "contact_name": {
+                    "type": "string",
+                    "description": "Optional. Filter calls belonging to one contact."
                 }
             }
         }
@@ -136,29 +146,175 @@ tools = [
             "properties": {"name": {"type": "string"}}
         }
     },
-    {
-        "type": "function",
-        "name": "analyze_dashboard_data",
-        "description": "Fetch aggregated dashboard analytics and numbers (counts, totals, success rates). Use this ONLY when asked 'how many', 'summarize', or for broad statistics.",
-        "parameters": {"type": "object", "properties": {}}
-    }
+    # NEW ENTITY-CENTRIC ANALYTICS TOOLS
+    
 ]
-def agentic_save(input_list: list) -> str:
+
+ANALYTICS_TOOLS = [
+    {
+            "type": "function",
+            "name": "analyze_calls",
+            "description": """
+                    Analyze aggregated call statistics and operational performance.
+    
+                    Use ONLY when the user requests:
+    
+                    - counts
+                    - totals
+                    - percentages
+                    - trends
+                    - summaries
+                    - analytics
+                    - success rate
+                    - failure rate
+                    - performance metrics
+    
+                    Examples:
+    
+                    - How many calls failed today?
+                    - How many completed calls do we have?
+                    - What is our success rate?
+                    - Summarize this week's calls.
+                    - Analyze call performance.
+                    - Which day had the most failed calls?
+    
+                    Do NOT use this tool to list or inspect individual call records.
+                    """,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "timeframe": {"type": "string", "enum": ["today", "yesterday", "this_week", "this_month", "all_time"]},
+                    "status": {"type": "string", "enum": ["ALL", "COMPLETED", "FAILED", "PENDING"]},
+                    "contact_name": {"type": "string", "description": "Optional name filter for a specific recipient"},
+                    "action": {"type": "string", "description": "Optional action type filter"}
+                }
+            }
+        },
+        {
+            "type": "function",
+            "name": "analyze_tasks",
+            "description": """
+                Analyze task workload and completion statistics.
+    
+                Examples:
+    
+                - How many pending tasks do we have?
+                - How many email tasks were completed?
+                - Summarize task performance.
+                - Show task completion rate.
+    
+                Do NOT use this tool to list individual tasks.
+                """,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "timeframe": {"type": "string", "enum": ["today", "yesterday", "this_week", "this_month", "all_time"]},
+                    "status": {"type": "string", "enum": ["ALL", "PENDING", "COMPLETED", "FAILED"]},
+                    "action": {"type": "string", "enum": ["ALL", "call", "email", "message", "other"]}
+                }
+            }
+        },
+        {
+            "type": "function",
+            "name": "analyze_contacts",
+            "description": """
+                Analyze contact engagement and communication statistics.
+    
+                Examples:
+    
+                - Who is our most contacted person?
+                - Which contact has the highest success rate?
+                - Show inactive contacts.
+                - Which contacts receive the most calls?
+    
+                Do NOT use this tool to retrieve contact details.
+                """,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "metric_type": {"type": "string", "enum": ["most_contacted", "highest_success_rate", "lowest_success_rate", "uncontacted"]},
+                    "timeframe": {"type": "string", "enum": ["today", "this_week", "this_month", "all_time"]}
+                }
+            }
+        }
+]
+
+def explain_analytics(user_query: str, tool_result: dict) -> str:
+    
+    response = gemini_client.models.generate_content(
+        model="gemini-3.5-flash-lite",
+        contents=[
+            types.Content(
+                role="user",
+                parts=[
+                    types.Part.from_text(
+                        text=f"""
+User Question:
+{user_query}
+
+Analytics Result:
+{json.dumps(tool_result, indent=2)}
+
+You are RelayAI's Lead Data Analyst.
+
+Answer the user's question using ONLY the supplied analytics.
+
+Rules:
+1. Never output JSON.
+2. Never mention internal fields such as query, summary, details or metadata.
+3. Answer directly using the numbers provided.
+4. Mention trends only if they are visible in the data.
+5. Provide ONE recommendation ONLY if it is directly supported by the analytics.
+6. Never recommend external systems, CRM software, APIs, or infrastructure changes unless explicitly shown in the analytics.
+7. If there is no meaningful recommendation, simply stop after answering.
+"""
+                    )
+                ],
+            )
+        ],
+        config=types.GenerateContentConfig(
+            temperature=0,
+        ),
+    )
+
+    return response.text
+def agentic_save(input_list: list,mode: str = "default") -> str:
     user_query = next((item['content'] for item in reversed(input_list) if item['role'] == 'user'), "")
     
-    system_msg_content = """
-        You are RelayAI, an AI assistant for a Workforce and Call Management platform.
+    if mode == "analytics":
+        system_msg_content = """
+    You are RelayAI's Executive Data Analyst.
 
-        Use the provided functions whenever the user's request requires data retrieval or modification.
+You answer questions about analytics, trends, calls, tasks, contacts, and performance metrics.
 
-        Never invent task, contact, or call information.
+If a user requests an operational action such as creating tasks, updating contacts, deleting records, or scheduling calls:
 
-        If a suitable function exists, call it.
+- Politely explain that this workspace is for analytics only.
+- Ask them to use the Agentic Chat workspace for operational actions.
+- Do not apologize unless an actual error occurred.
+    """
+    else:
+        system_msg_content = """
+    You are RelayAI, the AI assistant for a Workforce and Call Management platform.
 
-        Only answer directly when no function is needed.
+Your responsibilities:
+- Manage tasks (create, update, delete, list)
+- Manage contacts (create, update, delete, search)
+- Retrieve call history and call records
+- Answer analytics questions using the available analytics tools
 
-        Never use LaTeX.
-        """
+Rules:
+1. Always use an available function whenever the user's request requires retrieving or modifying data.
+2. Never invent tasks, contacts, calls, or analytics.
+3. If multiple tools are available, choose the one that best matches the user's intent.
+4. Ask for clarification only when the request is genuinely ambiguous.
+5. Keep responses concise, professional, and user-focused.
+6. Never expose internal implementation details, function names, database schemas, or JSON unless explicitly requested.
+7. Never use Markdown tables unless the user asks for them.
+8. Never use LaTeX.
+
+You are the primary operational assistant for RelayAI.
+    """
 
     system_msg = {"role": "system", "content": system_msg_content}
 
@@ -168,13 +324,19 @@ def agentic_save(input_list: list) -> str:
         input_list[0] = system_msg
 
 # Convert OpenAI tool schema to Gemini tool schema
+    selected_tools = (
+        ANALYTICS_TOOLS
+        if mode == "analytics"
+        else DEFAULT_TOOLS
+    )
+
     function_declarations = [
         types.FunctionDeclaration(
             name=tool["name"],
             description=tool["description"],
             parameters_json_schema=tool["parameters"],
         )
-        for tool in tools
+        for tool in selected_tools
     ]
 
     gemini_tools = [
@@ -243,12 +405,38 @@ def agentic_save(input_list: list) -> str:
         elif function_name == "search_contacts":
             result = format_search_contacts(**arguments)
         elif function_name == "fetch_call_history":
+            print("ARGS:", arguments)
             result = format_fetch_call_history(**arguments)
         elif function_name == "fetch_filtered_tasks":
             result = format_fetch_filtered_tasks(**arguments)
-        elif function_name == "analyze_dashboard_data":
-            result = json.dumps(get_dashboard_metrics(), indent=2)
-        # Additional function routers will be wired here...
+        elif function_name == "analyze_calls":
+            # analyze_calls
+            arguments.setdefault("timeframe", "all_time")
+            arguments.setdefault("status", "ALL")
+
+            result = explain_analytics(
+                user_query,
+                format_analyze_calls(**arguments)
+            )
+
+        elif function_name == "analyze_tasks":
+            arguments.setdefault("timeframe", "all_time")
+            arguments.setdefault("status", "ALL")
+
+            result = explain_analytics(
+                user_query,
+                format_analyze_tasks(**arguments)
+            )
+
+        elif function_name == "analyze_contacts":
+            # analyze_contacts
+            arguments.setdefault("timeframe", "all_time")
+            arguments.setdefault("metric_type", "most_contacted")
+
+            result = explain_analytics(
+                user_query,
+                format_analyze_contacts(**arguments)
+            )
     elif assistant_text:
         result = assistant_text
         

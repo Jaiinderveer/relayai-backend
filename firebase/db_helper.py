@@ -181,6 +181,7 @@ class DBHelper:
     def save_contact(self, name: str, phone: str) -> str:
         self.select_collection('contacts')
         clean_name = " ".join(name.strip().split())
+
         return self.save({'name': clean_name, 'phone': phone.strip()})
 
     def get_contacts(self, condition: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
@@ -215,9 +216,19 @@ class DBHelper:
         self.select_collection('tasks')
         return self.update({'_id': call_id}, updates)
 
-    def get_calls(self, intent_status: Optional[str] = None, date_preset: Optional[str] = None) -> List[Dict[str, Any]]:
+    def get_calls(
+    self,
+    intent_status=None,
+    date_preset=None,
+    contact_name=None
+):
         self.select_collection('tasks')
-        filter_cond = build_canonical_call_filter(intent_status, date_preset)
+        filter_cond = build_canonical_call_filter(
+    intent_status,
+    date_preset,
+    contact_name
+)
+        print(filter_cond)
         results = self.retrieve(filter_cond)
         
         # Sort descending by created_at
@@ -225,7 +236,11 @@ class DBHelper:
         
         # Smart Fallback if date filter returned 0
         if not results and date_preset:
-            fallback_cond = build_canonical_call_filter(intent_status, date_preset=None)
+            fallback_cond = build_canonical_call_filter(
+    intent_status,
+    None,
+    contact_name
+)
             results = self.retrieve(fallback_cond)
             results.sort(key=lambda x: x.get('created_at', datetime.datetime.min), reverse=True)
             
@@ -236,12 +251,16 @@ class DBHelper:
 # CANONICAL ANALYTICS LAYER (FIRESTORE ADAPTATION)
 # ==============================================================================
 
-def build_canonical_call_filter(intent_status: Optional[str] = None, date_preset: Optional[str] = None) -> Dict[str, Any]:
+def build_canonical_call_filter(intent_status: Optional[str] = None, date_preset: Optional[str] = None, contact_name = None) -> Dict[str, Any]:
     condition: Dict[str, Any] = {"action": "call"}
+    if contact_name:
+        condition["contact_name"] = {
+            "$regex": f"^{re.escape(contact_name.strip())}$",
+            "$options": "i"
+        }
 
     if intent_status:
         intent_upper = str(intent_status).upper().strip()
-        
         if intent_upper == "FAILED":
             condition["$or"] = [
                 {"status": {"$regex": "^FAILED$", "$options": "i"}},
@@ -256,7 +275,7 @@ def build_canonical_call_filter(intent_status: Optional[str] = None, date_preset
             condition["status"] = {"$in": ["PENDING", "CALLING"]}
 
     if date_preset:
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=5,minutes=30)))
         if date_preset == "today":
             start = now.replace(hour=0, minute=0, second=0, microsecond=0)
             end = start + datetime.timedelta(days=1)
@@ -375,9 +394,10 @@ def get_tasks_query(status: Optional[str] = None, date_preset: Optional[str] = N
         condition["status"] = {"$regex": f"^{re.escape(status.strip())}$", "$options": "i"}
     
     if action and action.strip():
-        condition["action"] = {"$regex": f"^{re.escape(action.strip())}$", "$options": "i"}
-    else:
-        condition["action"] = {"$ne": "call"}
+        condition["action"] = {
+            "$regex": f"^{re.escape(action.strip())}$",
+            "$options": "i"
+        }
         
     if date_preset:
         now = datetime.datetime.now(datetime.timezone.utc)
