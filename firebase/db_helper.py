@@ -4,13 +4,11 @@ from typing import Dict, Any, List, Optional
 from firebase.client import db
 
 class UpdateResult:
-    """Wrapper to mimic PyMongo UpdateResult signature."""
     def __init__(self, matched_count: int, modified_count: int = 1):
         self.matched_count = matched_count
         self.modified_count = modified_count
 
 class DeleteResult:
-    """Wrapper to mimic PyMongo DeleteResult signature."""
     def __init__(self, deleted_count: int):
         self.deleted_count = deleted_count
 
@@ -27,10 +25,6 @@ class DBHelper:
         self.collection = self.db.collection(collection_name)
         print(f' [DBHelper] Collection Selected: {collection_name}')
         return self
-
-    # =========================================================================
-    # GENERIC COLLECTION METHODS (PyMongo Compatibility Layer)
-    # =========================================================================
 
     def save(self, document: Dict[str, Any]) -> str:
         """Saves a document to the current collection."""
