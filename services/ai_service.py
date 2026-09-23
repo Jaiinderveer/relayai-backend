@@ -1,12 +1,13 @@
 import json
+import httpx
 from core.config import gemini_client
 from services.task_service import (
-    format_save_task, format_update_task, format_delete_task, 
+    format_save_task, format_update_task, format_delete_task,
     format_list_tasks, format_fetch_filtered_tasks, format_fetch_call_history,
     format_save_contact, format_update_contact, format_delete_contact,
     format_search_contacts,format_analyze_calls,format_analyze_contacts,format_analyze_tasks
 )
-from google.genai import types 
+from google.genai import errors, types
 # Note: In Phase 4, we will add the remaining formatters (fetch_call_history, save_contact, etc.) to task_service.py
 
 # Copied exactly from ai_agent.py
@@ -239,10 +240,51 @@ ANALYTICS_TOOLS = [
         }
 ]
 
+# Gemini models are occasionally overloaded, returning 503 or stalling without a
+# response. Try the preferred model first, then fall back so one unavailable model
+# cannot fail the whole request. Fallbacks are ordered by observed availability.
+MODEL_FALLBACK_CHAIN = (
+    "gemini-3.5-flash-lite",
+    "gemini-3-flash-preview",
+    "gemini-3.6-flash",
+)
+
+# Per-attempt request timeout (milliseconds) and SDK retries before trying the next model.
+REQUEST_TIMEOUT_MS = 15000
+RETRY_ATTEMPTS = 2
+
+_HTTP_OPTIONS = types.HttpOptions(
+    timeout=REQUEST_TIMEOUT_MS,
+    retry_options=types.HttpRetryOptions(attempts=RETRY_ATTEMPTS),
+)
+
+
+def _generate_content_with_fallback(contents, system_instruction=None, tools=None, temperature=0):
+    """Calls Gemini, falling back to the next model when one is unavailable."""
+    last_error = None
+
+    for model in MODEL_FALLBACK_CHAIN:
+        try:
+            return gemini_client.models.generate_content(
+                model=model,
+                contents=contents,
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    tools=tools,
+                    temperature=temperature,
+                    http_options=_HTTP_OPTIONS,
+                ),
+            )
+        except (errors.APIError, httpx.TransportError) as e:
+            last_error = e
+            print(f" [Gemini] {model} unavailable ({type(e).__name__}): {e}. Trying next model.")
+
+    raise last_error
+
+
 def explain_analytics(user_query: str, tool_result: dict) -> str:
     
-    response = gemini_client.models.generate_content(
-        model="gemini-3.5-flash-lite",
+    response = _generate_content_with_fallback(
         contents=[
             types.Content(
                 role="user",
@@ -272,9 +314,6 @@ Rules:
                 ],
             )
         ],
-        config=types.GenerateContentConfig(
-            temperature=0,
-        ),
     )
 
     return response.text
@@ -359,16 +398,12 @@ You are the primary operational assistant for RelayAI.
             )
         )
 
-    response = gemini_client.models.generate_content(
-        model="gemini-3.5-flash-lite",
+    response = _generate_content_with_fallback(
         contents=contents,
-        config=types.GenerateContentConfig(
-            system_instruction=system_msg_content,
-            tools=gemini_tools,
-            temperature=0
-        )
+        system_instruction=system_msg_content,
+        tools=gemini_tools,
     )
-    
+
     function_call = None
     assistant_text = ""
 
